@@ -1,1 +1,396 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lista de Alunos</title>
 
+<style>
+:root{
+    --primary:#2563eb;
+    --primary-hover:#1d4ed8;
+    --bg:#f4f7fb;
+    --card:#ffffff;
+    --border:#e5e7eb;
+    --text:#111827;
+    --muted:#6b7280;
+    --success:#16a34a;
+    --danger:#dc2626;
+}
+
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+}
+
+body{
+    font-family:Arial, Helvetica, sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    min-height:100vh;
+    padding:20px;
+}
+
+.container{
+    max-width:800px;
+    margin:0 auto;
+}
+
+.card{
+    background:var(--card);
+    border-radius:16px;
+    box-shadow:0 10px 30px rgba(0,0,0,.08);
+    overflow:hidden;
+}
+
+.header{
+    padding:24px;
+    border-bottom:1px solid var(--border);
+}
+
+.header h1{
+    font-size:28px;
+}
+
+.header p{
+    color:var(--muted);
+    margin-top:6px;
+}
+
+.content{
+    padding:24px;
+}
+
+.form{
+    display:flex;
+    gap:12px;
+    margin-bottom:20px;
+}
+
+input{
+    flex:1;
+    height:48px;
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:0 14px;
+    font-size:16px;
+}
+
+input:focus{
+    outline:none;
+    border-color:var(--primary);
+}
+
+button{
+    height:48px;
+    padding:0 24px;
+    border:none;
+    border-radius:10px;
+    background:var(--primary);
+    color:white;
+    cursor:pointer;
+    font-weight:bold;
+    transition:.2s;
+}
+
+button:hover{
+    background:var(--primary-hover);
+}
+
+.status{
+    margin-bottom:15px;
+    font-size:14px;
+    font-weight:bold;
+}
+
+.success{
+    color:var(--success);
+}
+
+.error{
+    color:var(--danger);
+}
+
+.list{
+    border:1px solid var(--border);
+    border-radius:10px;
+    overflow:hidden;
+}
+
+.row{
+    padding:14px 16px;
+}
+
+.row:nth-child(odd){
+    background:#ffffff;
+}
+
+.row:nth-child(even){
+    background:#f9fafb;
+}
+
+.empty{
+    padding:20px;
+    text-align:center;
+    color:var(--muted);
+}
+
+.loading{
+    padding:20px;
+    text-align:center;
+    color:var(--muted);
+}
+
+@media(max-width:600px){
+
+    .form{
+        flex-direction:column;
+    }
+
+    button{
+        width:100%;
+    }
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+
+    <div class="card">
+
+        <div class="header">
+            <h1>Lista de Alunos</h1>
+            <p>Cadastro utilizando Google Planilhas + Apps Script</p>
+        </div>
+
+        <div class="content">
+
+            <div class="form">
+                <input
+                    type="text"
+                    id="studentName"
+                    placeholder="Digite o nome do aluno"
+                >
+                <button id="saveBtn">
+                    Salvar
+                </button>
+            </div>
+
+            <div id="status" class="status"></div>
+
+            <div id="studentList" class="list">
+                <div class="loading">Carregando...</div>
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+<script>
+
+/*
+====================================================
+CONFIGURAÇÃO
+====================================================
+Cole aqui a URL do Web App do Apps Script
+====================================================
+*/
+
+const CONFIG = {
+    WEB_APP_URL: "https://script.google.com/macros/s/AKfycbzxVKJv1uWgQ9bX1BpbSie3BXZjYbQmMuJlcPYY231mIpvxp3T3bTvdLVHQ6h_SaIfv/exec"
+};
+
+/*
+====================================================
+JSONP
+====================================================
+*/
+
+function jsonp(url, callbackName){
+
+    const script = document.createElement("script");
+
+    script.src =
+        url +
+        (url.includes("?") ? "&" : "?") +
+        "callback=" +
+        callbackName +
+        "&_=" +
+        Date.now();
+
+    document.body.appendChild(script);
+
+    script.onload = () => script.remove();
+}
+
+/*
+====================================================
+STATUS
+====================================================
+*/
+
+function showStatus(message, type){
+
+    const el = document.getElementById("status");
+
+    el.className = "status " + type;
+    el.textContent = message;
+
+    setTimeout(() => {
+        el.textContent = "";
+        el.className = "status";
+    }, 3000);
+}
+
+/*
+====================================================
+LISTAR
+====================================================
+*/
+
+function loadStudents(){
+
+    window.studentsCallback = function(response){
+
+        const list = document.getElementById("studentList");
+
+        if(!response.success){
+
+            list.innerHTML =
+                '<div class="empty">Erro ao carregar dados.</div>';
+
+            return;
+        }
+
+        const students = response.data || [];
+
+        if(students.length === 0){
+
+            list.innerHTML =
+                '<div class="empty">Nenhum aluno cadastrado.</div>';
+
+            return;
+        }
+
+        list.innerHTML = students
+            .map(item =>
+                `<div class="row">${escapeHtml(item.nome)}</div>`
+            )
+            .join("");
+    };
+
+    jsonp(
+        CONFIG.WEB_APP_URL + "?action=list",
+        "studentsCallback"
+    );
+}
+
+/*
+====================================================
+SALVAR
+====================================================
+*/
+
+function addStudent(){
+
+    const input = document.getElementById("studentName");
+
+    const name = input.value.trim();
+
+    if(!name){
+
+        showStatus(
+            "Digite o nome do aluno.",
+            "error"
+        );
+
+        input.focus();
+        return;
+    }
+
+    const callbackName =
+        "addCallback_" +
+        Date.now();
+
+    window[callbackName] = function(response){
+
+        if(response.success){
+
+            input.value = "";
+
+            showStatus(
+                "Aluno salvo com sucesso.",
+                "success"
+            );
+
+            loadStudents();
+
+        }else{
+
+            showStatus(
+                response.message || "Erro ao salvar.",
+                "error"
+            );
+        }
+
+        delete window[callbackName];
+    };
+
+    const url =
+        CONFIG.WEB_APP_URL +
+        "?action=add" +
+        "&name=" +
+        encodeURIComponent(name);
+
+    jsonp(url, callbackName);
+}
+
+/*
+====================================================
+UTIL
+====================================================
+*/
+
+function escapeHtml(text){
+
+    const div = document.createElement("div");
+    div.innerText = text;
+    return div.innerHTML;
+}
+
+/*
+====================================================
+EVENTOS
+====================================================
+*/
+
+document
+.getElementById("saveBtn")
+.addEventListener("click", addStudent);
+
+document
+.getElementById("studentName")
+.addEventListener("keydown", e => {
+
+    if(e.key === "Enter"){
+        addStudent();
+    }
+
+});
+
+/*
+====================================================
+INICIAR
+====================================================
+*/
+
+loadStudents();
+
+</script>
+
+</body>
+</html>
